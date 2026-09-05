@@ -88,13 +88,15 @@ wheels = [
 [[package]]
 name = "gamx"
 version = "0.1.0"
-source = { path = "dist/gamx-0.1.0.tar.gz" }
+source = { path = "dist/gamx-0.1.0-cp39-abi3-win_amd64.whl" }
 dependencies = [
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "polars" },
 ]
-sdist = { hash = "sha256:892599a122ee009fbd5d7f1f6b8bf463be0238b49bdf566b138718f8dc6e288e" }
+wheels = [
+    { filename = "gamx-0.1.0-cp39-abi3-win_amd64.whl", hash = "sha256:b986fb025619bf27460f5a933236ce56165afcea39f33f5a961548741c048af2" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -112,7 +114,7 @@ dependencies = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "gamx", path = "dist/gamx-0.1.0.tar.gz" }]
+requires-dist = [{ name = "gamx", path = "dist/gamx-0.1.0-cp39-abi3-win_amd64.whl" }]
 
 [[package]]
 name = "kiwisolver"

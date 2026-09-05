@@ -9,4 +9,4 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-gamx = { path = "dist/gamx-0.1.0.tar.gz" }
+gamx = { path = "dist/gamx-0.1.0-cp39-abi3-win_amd64.whl" }
