@@ -1,5 +1,5 @@
 
-from gamx import Distribution, Link, GamFamily, CrSmooth, GamX, GamxFormula
+from gamx import Distribution, Link, GamFamily, CrSmooth, GamX, GamxFormula, GamFormula
 import gamx
 import polars as pl
 import os
@@ -9,13 +9,14 @@ df_raw = (
     pl.read_parquet(
         os.path.join(
             'data',
-            'log_gamma.parquet'
+            'log_gamma_unif_x.parquet'
         )
     )
+    .sort('x')
 )
 
 ## add excess
-df1 = (
+df = (
     df_raw
         .with_columns(
             pl
@@ -41,15 +42,6 @@ df1 = (
             (pl.col('phi_high') > pl.col('excess')).alias('phi_high_obs'),
         )
 )
-df = (
-    df1
-        # .filter(
-        #     pl.col('phi_low_obs').and_(pl.col('phi_high_obs')),
-        #     pl.col('x') > 1000000.0 * 0.2,
-        # )
-)
-
-
 
 ## unknown dispersion
 def search_phi(
@@ -80,6 +72,9 @@ def search_phi(
             raise ValueError("Maximum number of iterations reached.")
     return phi
 
+knots = [
+    0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9,
+]
 phi1 = search_phi(
     0.8,
     1.5,
@@ -97,7 +92,7 @@ phi1 = search_phi(
                         name = 'x',
                         knots = [
                             1000000 * x
-                            for x in [0.2, 0.4, 0.6, 0.8]
+                            for x in knots
                         ],
                         sp = None,
                     ),
@@ -115,6 +110,7 @@ phi1 = search_phi(
         phi = phi,
     ).chi_stat - 1.0
 )
+print(phi1)
 
 m1 = gamx.gamx(
     df
@@ -130,7 +126,7 @@ m1 = gamx.gamx(
                     name = 'x',
                     knots = [
                         1000000 * x
-                        for x in [0.2, 0.4, 0.6, 0.8]
+                        for x in knots
                     ],
                     sp = None,
                 ),
@@ -148,6 +144,18 @@ m1 = gamx.gamx(
     phi = phi1,
 )
 
+## plot m1 versus truth
+m1p = m1.plot('x', display = False)
+
+plt.plot(df['x'], df['mu'], label = 'truth', color='red', linestyle='-')
+plt.plot(m1p.x, pl.Series(m1p.eta + m1.beta[0,0]).exp(), label = 'estimated', color='blue', linestyle='-')
+plt.plot(m1p.x, pl.Series(m1p.eta_lower + m1.beta[0,0]).exp(), label = '95% confidence interval', color='grey', linestyle='--')
+plt.plot(m1p.x, pl.Series(m1p.eta_upper + m1.beta[0,0]).exp(), color='grey', linestyle='--')
+
+plt.xlabel('x')
+plt.ylabel('mu')
+plt.legend()
+plt.show()
 
 phi2 = search_phi(
     1.0,
@@ -166,7 +174,7 @@ phi2 = search_phi(
                         name = 'x',
                         knots = [
                             1000000 * x
-                            for x in [0.2, 0.4, 0.6, 0.8]
+                            for x in knots
                         ],
                         sp = None,
                     ),
@@ -184,6 +192,7 @@ phi2 = search_phi(
         phi = phi,
     ).chi_stat - 1.0
 )
+print(phi2)
 
 m2 = gamx.gamx(
     df
@@ -199,7 +208,7 @@ m2 = gamx.gamx(
                     name = 'x',
                     knots = [
                         1000000 * x
-                        for x in [0.2, 0.4, 0.6, 0.8]
+                        for x in knots
                     ],
                     sp = None,
                 ),
@@ -218,23 +227,29 @@ m2 = gamx.gamx(
 )
 
 
-## plot
-## unknown dispersion
-plt.plot(df['x'], df['mu'], label = 'mu', color='blue', linestyle='-')
-plt.plot(df.filter(pl.col('phi_low_obs'))['x'], m1.mu, label = 'phi_low', color='red', linestyle='-')
-plt.plot(df.filter(pl.col('phi_high_obs'))['x'], m2.mu, label = 'phi_high', color='green', linestyle='-')
+## plot m2 versus truth
+m2p = m2.plot('x', display = False)
+
+plt.plot(df['x'], df['mu'], label = 'truth', color='red', linestyle='-')
+plt.plot(m2p.x, pl.Series(m2p.eta + m2.beta[0,0]).exp(), label = 'estimated', color='blue', linestyle='-')
+plt.plot(m2p.x, pl.Series(m2p.eta_lower + m2.beta[0,0]).exp(), label = '95% confidence interval', color='grey', linestyle='--')
+plt.plot(m2p.x, pl.Series(m2p.eta_upper + m2.beta[0,0]).exp(), color='grey', linestyle='--')
+
+plt.xlabel('x')
+plt.ylabel('mu')
 plt.legend()
 plt.show()
 
-
-## known dispersion
-
-m1 = gamx.gamx(
+## fit gam 
+m1_gam = gamx.gam(
     df
         .filter(
             pl.col('phi_low_obs')
+        )
+        .with_columns(
+            (pl.col('phi_low') - pl.col('excess')).alias('phi_low')
         ),
-    GamxFormula(
+    GamFormula(
         x = GamX(
             linear = [],
             categorical = [],
@@ -243,14 +258,13 @@ m1 = gamx.gamx(
                     name = 'x',
                     knots = [
                         1000000 * x
-                        for x in [0.2, 0.4, 0.6, 0.8]
+                        for x in knots
                     ],
                     sp = None,
                 ),
             ],
         ),
         y = 'phi_low',
-        a = 'excess',
         w = None,
         offset = None,
     ),
@@ -258,15 +272,33 @@ m1 = gamx.gamx(
         distribution = Distribution.Gamma,
         link = Link.Log,
     ),
-    phi = 1.2,
 )
 
-m2 = gamx.gamx(
+m1p_gam = m1_gam.plot('x', display = False)
+
+plt.plot(df['x'], df['mu'], label = 'truth', color='red', linestyle='-')
+plt.plot(m1p_gam.x, pl.Series(m1p_gam.eta + m1_gam.beta[0,0]).exp(), label = 'estimated', color='blue', linestyle='-')
+plt.plot(m1p_gam.x, pl.Series(m1p_gam.eta_lower + m1_gam.beta[0,0]).exp(), label = '95% confidence interval', color='grey', linestyle='--')
+plt.plot(m1p_gam.x, pl.Series(m1p_gam.eta_upper + m1_gam.beta[0,0]).exp(), color='grey', linestyle='--')
+
+plt.xlabel('x')
+plt.ylabel('mu')
+plt.legend()
+plt.show()
+
+print(m1_gam.phi)
+
+## high dispersion
+
+m2_gam = gamx.gam(
     df
         .filter(
             pl.col('phi_high_obs')
+        )
+        .with_columns(
+            (pl.col('phi_high') - pl.col('excess')).alias('phi_high')
         ),
-    GamxFormula(
+    GamFormula(
         x = GamX(
             linear = [],
             categorical = [],
@@ -275,14 +307,13 @@ m2 = gamx.gamx(
                     name = 'x',
                     knots = [
                         1000000 * x
-                        for x in [0.2, 0.4, 0.6, 0.8]
+                        for x in knots
                     ],
                     sp = None,
                 ),
             ],
         ),
         y = 'phi_high',
-        a = 'excess',
         w = None,
         offset = None,
     ),
@@ -290,17 +321,18 @@ m2 = gamx.gamx(
         distribution = Distribution.Gamma,
         link = Link.Log,
     ),
-    phi = 2.0,
 )
 
-## plot
-## known dispersion
-plt.plot(df['x'], df['mu'], label = 'mu', color='blue', linestyle='-')
-plt.plot(df.filter(pl.col('phi_low_obs'))['x'], m1.mu, label = 'phi_low', color='red', linestyle='-')
-plt.plot(df.filter(pl.col('phi_high_obs'))['x'], m2.mu, label = 'phi_high', color='green', linestyle='-')
+m2p_gam = m2_gam.plot('x', display = False)
+
+plt.plot(df['x'], df['mu'], label = 'truth', color='red', linestyle='-')
+plt.plot(m2p_gam.x, pl.Series(m2p_gam.eta + m2_gam.beta[0,0]).exp(), label = 'estimated', color='blue', linestyle='-')
+plt.plot(m2p_gam.x, pl.Series(m2p_gam.eta_lower + m2_gam.beta[0,0]).exp(), label = '95% confidence interval', color='grey', linestyle='--')
+plt.plot(m2p_gam.x, pl.Series(m2p_gam.eta_upper + m2_gam.beta[0,0]).exp(), color='grey', linestyle='--')
+
+plt.xlabel('x')
+plt.ylabel('mu')
 plt.legend()
 plt.show()
 
-##
-df.filter(pl.col('phi_low_obs'))
-df.filter(pl.col('phi_high_obs'))
+print(m2_gam.phi)

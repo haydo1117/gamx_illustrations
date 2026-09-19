@@ -19,7 +19,7 @@ samples_low = rng.gamma(shape_low, size = n)
 samples_high = rng.gamma(shape_high, size = n)
 
 ## data
-x = np.linspace(1000.0, 1000000.0, n)
+x = rng.uniform(1000.0, 1000000.0, n)
 eta = 0.3 * np.log(x)
 mu = np.exp(eta) * 100.0
 
@@ -34,18 +34,4 @@ df = pl.DataFrame(
     }
 )
 ## export
-df.write_parquet('data/log_gamma.parquet')
-
-
-## plot
-
-# plt.plot(df['x'], df['mu'], color='blue', linestyle='-')
-# plt.show()
-
-
-# plt.plot(df['x'], df['phi_low'], color='blue', linestyle='-')
-# plt.show()
-
-
-# plt.plot(df['x'], df['phi_high'], color='blue', linestyle='-')
-# plt.show()
+df.write_parquet('data/log_gamma_unif_x.parquet')
